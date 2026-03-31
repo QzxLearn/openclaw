@@ -72,6 +72,51 @@ export function extractSessionText(content: unknown): string | null {
   return parts.join(" ");
 }
 
+/**
+ * Extract text from a toolCall block for session indexing.
+ * Format: "Tool: tool_name | arg1=value1, arg2=value2"
+ */
+export function extractToolCallText(block: unknown): string | null {
+  if (!block || typeof block !== "object") {
+    return null;
+  }
+  const b = block as { type?: unknown; name?: unknown; arguments?: unknown };
+  if (b.type !== "toolCall" || typeof b.name !== "string") {
+    return null;
+  }
+  let argsStr = "";
+  if (b.arguments && typeof b.arguments === "object") {
+    try {
+      argsStr = Object.entries(b.arguments as Record<string, unknown>)
+        .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+        .join(", ");
+    } catch {
+      argsStr = "";
+    }
+  }
+  const prefix = `Tool: ${b.name}`;
+  return argsStr ? `${prefix} | ${argsStr}` : prefix;
+}
+
+/**
+ * Extract text from a toolResult message for session indexing.
+ * Format: "ToolResult: tool_name | result text"
+ */
+export function extractToolResultText(
+  role: unknown,
+  toolName: unknown,
+  content: unknown,
+): string | null {
+  if (role !== "toolResult" || typeof toolName !== "string") {
+    return null;
+  }
+  const text = extractSessionText(content);
+  if (!text) {
+    return `ToolResult: ${toolName}`;
+  }
+  return `ToolResult: ${toolName} | ${text}`;
+}
+
 export async function buildSessionEntry(absPath: string): Promise<SessionFileEntry | null> {
   try {
     const stat = await fs.stat(absPath);
@@ -98,14 +143,57 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
         continue;
       }
       const message = (record as { message?: unknown }).message as
-        | { role?: unknown; content?: unknown }
+        | { role?: unknown; content?: unknown; toolName?: unknown }
         | undefined;
       if (!message || typeof message.role !== "string") {
         continue;
       }
+
+      // Handle toolResult messages (independent messages, not assistant/user)
+      if (message.role === "toolResult") {
+        const toolResultText = extractToolResultText(
+          message.role,
+          message.toolName,
+          message.content,
+        );
+        if (toolResultText) {
+          const safe = redactSensitiveText(toolResultText, { mode: "tools" });
+          collected.push(safe);
+          lineMap.push(jsonlIdx + 1);
+        }
+        continue;
+      }
+
       if (message.role !== "user" && message.role !== "assistant") {
         continue;
       }
+
+      // Extract from assistant content[]: both text blocks and toolCall blocks
+      if (message.role === "assistant" && Array.isArray(message.content)) {
+        for (const block of message.content) {
+          if (!block || typeof block !== "object") {
+            continue;
+          }
+          const blockType = (block as { type?: unknown }).type;
+          if (blockType === "toolCall") {
+            const toolText = extractToolCallText(block);
+            if (toolText) {
+              const safe = redactSensitiveText(toolText, { mode: "tools" });
+              collected.push(safe);
+              lineMap.push(jsonlIdx + 1);
+            }
+          } else if (blockType === "text") {
+            const text = extractSessionText([block]);
+            if (text) {
+              const safe = redactSensitiveText(text, { mode: "tools" });
+              collected.push(`Assistant: ${safe}`);
+              lineMap.push(jsonlIdx + 1);
+            }
+          }
+        }
+        continue;
+      }
+
       const text = extractSessionText(message.content);
       if (!text) {
         continue;
