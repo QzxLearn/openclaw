@@ -88,7 +88,7 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
 
   const port = resolved.controlPort;
   const server = await new Promise<Server>((resolve, reject) => {
-    const s = app.listen(port, "127.0.0.1", () => resolve(s));
+    const s = app.listen(port, "0.0.0.0", () => resolve(s));
     s.once("error", reject);
   }).catch((err) => {
     logServer.error(`openclaw browser server failed to bind 127.0.0.1:${port}: ${String(err)}`);
@@ -108,7 +108,7 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
   setBridgeAuthForPort(port, browserAuth);
 
   const authMode = browserAuth.token ? "token" : browserAuth.password ? "password" : "off";
-  logServer.info(`Browser control listening on http://127.0.0.1:${port}/ (auth=${authMode})`);
+  logServer.info(`Browser control listening on http://0.0.0.0:${port}/ (auth=${authMode})`);
   return state;
 }
 
