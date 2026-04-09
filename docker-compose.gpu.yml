@@ -1,0 +1,32 @@
+# GPU 加速配置 - 适用于 OpenClaw 的 llama.cpp 本地 embedding 模型加速
+#
+# 前置条件（宿主机需要安装）：
+#   1. NVIDIA 驱动（WSL 中: nvidia-smi 可用）
+#   2. NVIDIA Container Toolkit for WSL
+#      https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+#
+# 验证 GPU 可用（在 WSL 中执行）：
+#   nvidia-smi  # 应显示 GPU 型号
+#
+# 使用方式（通过 setup.sh 启用）：
+#   OPENCLAW_GPU=1 ./scripts/docker/setup.sh
+#   （自动加载此文件，无需手动指定 -f）
+#
+version: "3.8"
+
+services:
+  openclaw-gateway:
+    # GPU 加速核心配置
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all          # 所有 GPU 都暴露给容器
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility   # 启用 compute + utility 能力
+      # 可选：限制只用某块 GPU（如只用第二块）
+      # - NVIDIA_VISIBLE_DEVICES=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all                      # 使用所有 GPU
+              capabilities: [gpu, compute]     # gpu = 3D 加速, compute = CUDA 计算

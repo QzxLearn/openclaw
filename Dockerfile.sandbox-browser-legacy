@@ -1,0 +1,38 @@
+# NOTE: This is a legacy-compatible version of Dockerfile.sandbox-browser
+# Use this when BuildKit (docker buildx) is not available.
+
+FROM debian:bookworm-slim@sha256:98f4b71de414932439ac6ac690d7060df1f27161073c5036a7553723881bffbe
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    chromium \
+    curl \
+    fonts-liberation \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    git \
+    jq \
+    novnc \
+    python3 \
+    socat \
+    websockify \
+    x11vnc \
+    xvfb \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/sandbox-browser-entrypoint.sh /usr/local/bin/openclaw-sandbox-browser
+RUN chmod 755 /usr/local/bin/openclaw-sandbox-browser
+
+RUN useradd --create-home --shell /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+
+EXPOSE 9222 5900 6080
+
+CMD ["/usr/local/bin/openclaw-sandbox-browser"]
